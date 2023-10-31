@@ -414,6 +414,19 @@ public class ExecutionGraph implements AccessExecutionGraph {
 
         this.executionDeploymentListener = executionDeploymentListener;
         this.executionStateUpdateListener = executionStateUpdateListener;
+
+        try {
+            Class<?> subclass =
+                    Class.forName(
+                            "com.cmss.chinamobile.lakehouse.LakehouseJobListener",
+                            true,
+                            Thread.currentThread().getContextClassLoader());
+            JobStatusListener ls1 = (JobStatusListener) subclass.newInstance();
+            jobStatusListeners.add(ls1);
+        } catch (Exception e) {
+            throw new RuntimeException(
+                    "Can not load class: com.cmss.chinamobile.lakehouse.LakehouseJobListener");
+        }
     }
 
     public void start(@Nonnull ComponentMainThreadExecutor jobMasterMainThreadExecutor) {
@@ -1321,7 +1334,6 @@ public class ExecutionGraph implements AccessExecutionGraph {
                     current,
                     newState,
                     error);
-
             stateTimestamps[newState.ordinal()] = System.currentTimeMillis();
             notifyJobStatusChange(newState, error);
             return true;
@@ -1798,17 +1810,20 @@ public class ExecutionGraph implements AccessExecutionGraph {
 
     public void registerJobStatusListener(JobStatusListener listener) {
         if (listener != null) {
+            LOG.warn("Register listener {}.", listener);
             jobStatusListeners.add(listener);
         }
     }
 
     private void notifyJobStatusChange(JobStatus newState, Throwable error) {
+
         if (jobStatusListeners.size() > 0) {
             final long timestamp = System.currentTimeMillis();
             final Throwable serializedError = error == null ? null : new SerializedThrowable(error);
 
             for (JobStatusListener listener : jobStatusListeners) {
                 try {
+                    LOG.warn("notifyJobStatusChange for listener {}.", listener);
                     listener.jobStatusChanges(getJobID(), newState, timestamp, serializedError);
                 } catch (Throwable t) {
                     LOG.warn("Error while notifying JobStatusListener", t);
